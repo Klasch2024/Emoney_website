@@ -46,9 +46,10 @@ export default function Dashboard() {
   const [zip, setZip] = useState(cleanUSZip(initialZip || ""));
   const [stage, setStage] = useState<Stage>("demo"); // start at demo once we have a valid zip
 
-  const [email, setEmail] = useState("");
-  const [emailErr, setEmailErr] = useState<string | null>(null);
-  const [emailSubmitting, setEmailSubmitting] = useState(false);
+  // PHONE intake (US)
+  const [phone, setPhone] = useState("");
+  const [phoneErr, setPhoneErr] = useState<string | null>(null);
+  const [formSubmitting, setFormSubmitting] = useState(false);
 
   const [data, setData] = useState<ApiResp | null>(null);
   const [loading, setLoading] = useState(false);
@@ -128,41 +129,48 @@ export default function Dashboard() {
     setOpen(true);
   }
 
-  function isValidEmail(v: string) {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
+  // ---- PHONE HELPERS ----
+  function cleanPhone(input: string) {
+    return (input || "").replace(/\D+/g, "");
+  }
+  function isValidUSPhone(input: string) {
+    const digits = cleanPhone(input);
+    if (digits.length === 10) return true; // standard US number
+    if (digits.length === 11 && digits.startsWith("1")) return true; // with country code
+    return false;
   }
 
   async function submitDemo(e: React.FormEvent) {
     e.preventDefault();
-    setEmailErr(null);
+    setPhoneErr(null);
 
-    if (!isValidEmail(email)) {
-      setEmailErr("Enter a valid email address.");
+    if (!isValidUSPhone(phone)) {
+      setPhoneErr("Enter a valid US phone number.");
       return;
     }
 
     try {
-      setEmailSubmitting(true);
+      setFormSubmitting(true);
       // optional: record the demo lead — safe to no-op if you don’t have this route
       await fetch("/api/lead", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: "",
-          email,
-          phone: "",
+          email: "",
+          phone: cleanPhone(phone),
           source: "demo_mode",
           zip,
         }),
       }).catch(() => { /* ignore errors here */ });
 
-      gaEvent("demo_start", { zip, email });
+      gaEvent("demo_start", { zip, phone: cleanPhone(phone) });
       setStage("loading"); // this triggers fetchItems via effect
     } catch (err) {
       console.error(err);
-      setEmailErr("Could not start demo. Please try again.");
+      setPhoneErr("Could not start demo. Please try again.");
     } finally {
-      setEmailSubmitting(false);
+      setFormSubmitting(false);
     }
   }
 
@@ -179,47 +187,48 @@ export default function Dashboard() {
           >
             <h1 className="text-3xl font-extrabold tracking-tight">Try Demo Mode</h1>
             <p className="mt-2 text-white/75">
-             A private invite to our <span className="font-semibold">100% free telegram</span> deal group will be emailed to you (so check your email)
+              A private invite to our <span className="font-semibold">100% free Telegram</span> deal group will be
+              <span className="font-semibold"> texted to your phone</span> (watch for the SMS).
             </p>
 
             <form onSubmit={submitDemo} className="mx-auto mt-6 grid gap-3 max-w-md">
               <div className="text-left">
-                <label className="text-xs font-semibold text-white/70">Email</label>
+                <label className="text-xs font-semibold text-white/70">Phone</label>
                 <input
                   className="input mt-1 w-full"
-                  type="email"
-                  placeholder="you@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  aria-invalid={!!emailErr}
-                  aria-describedby="email-err"
+                  type="tel"
+                  inputMode="tel"
+                  placeholder="(555) 123-4567"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  aria-invalid={!!phoneErr}
+                  aria-describedby="phone-err"
                 />
-                {emailErr ? (
-                  <p id="email-err" className="mt-1 text-xs text-red-300">
-                    {emailErr}
+                {phoneErr ? (
+                  <p id="phone-err" className="mt-1 text-xs text-red-300">
+                    {phoneErr}
                   </p>
                 ) : null}
               </div>
 
-              {/* We show the submitted ZIP read-only to match your request “email textbox below where they submitted their zipcode” */}
+              {/* We show the submitted ZIP read-only to match your request “textbox below where they submitted their zipcode” */}
               <div className="text-left">
                 <label className="text-xs font-semibold text-white/70">ZIP Code</label>
                 <input className="input mt-1 w-full opacity-70" value={zip} readOnly />
-                <p className="mt-1 text-[11px] text-white/50">Scanning stores near this ZIP in demo.</p>
+                <p className="mt-1 text-[11px] text-white/50">Scanning stores near this ZIP in demo. Your invite will arrive by text.</p>
               </div>
 
               <motion.button
                 type="submit"
-                disabled={emailSubmitting}
+                disabled={formSubmitting}
                 className="btn btn-primary mt-2"
                 whileTap={{ scale: 0.98 }}
               >
-                {emailSubmitting ? "Starting Demo…" : "Start Demo"}
+                {formSubmitting ? "Starting Demo…" : "Start Demo"}
               </motion.button>
 
               <p className="mt-2 text-xs text-white/60">
-                Preview the Clearance Software for <span className="font-semibold">ZIP {zip}</span>. 
-                
+                Preview the Clearance Software for <span className="font-semibold">ZIP {zip}</span>.
               </p>
             </form>
           </motion.div>
@@ -289,122 +298,118 @@ export default function Dashboard() {
       </AnimatePresence>
 
       <Modal open={open} onClose={() => setOpen(false)}>
-                <div className="items-center justify-center text-center">
-                    <h3 className="text-xl font-bold">WAIT! 🛑</h3>
-                    <p className="text-sm text-white/70 mt-1">
-                        To Unlock Your Deal & Free Access to eMoney Click Below ✅
-                    </p>
+        <div className="items-center justify-center text-center">
+          <h3 className="text-xl font-bold">WAIT! 🛑</h3>
+          <p className="text-sm text-white/70 mt-1">
+            To Unlock Your Deal & Free Access to eMoney Click Below ✅
+          </p>
 
-                
-                    <div className="mt-6">
-                        <div className="inline-flex items-center justify-center rounded-xl px-4 py-2 font-semibold transition bg-[color:var(--card)] border border-white/10" onClick={finalizeRoute}>
-                            <div className="w-[10px] h-[10px] rounded-full bg-green-400 animate-pulse"></div> &nbsp; Get Full Access To Everything Below FOR FREE 🔓
-                        </div>
+          <div className="mt-6">
+            <div
+              className="inline-flex items-center justify-center rounded-xl px-4 py-2 font-semibold transition bg-[color:var(--card)] border border-white/10"
+              onClick={finalizeRoute}
+            >
+              <div className="w-[10px] h-[10px] rounded-full bg-green-400 animate-pulse"></div> &nbsp; Get Full Access To Everything Below FOR FREE 🔓
+            </div>
+          </div>
 
-                    </div>
-
-                    <SuccessHeroSlider
-                        items={[
-                            { src: "/success/insaneclearance.jpg", caption: "UNLOCK EXCLUSIVE HIDDEN CLEARANCE DEALS" },
-                            
-                            
-                            { src: "/success/pokemoncar.jpg", caption: "UNLOCK TRADING CARD RELEASES" },
-                            { src: "/success/lego.jpg", caption: "UNLOCK HIGH DEMAND COLLECTIBLES TO RESELL" },
-                            { src: "/success/penny.jpg", caption: "UNLOCK PENNY CLEARANCE ITEMS" },
-                            { src: "/success/tools.jpg", caption: "UNLOCK RANDOM RESELLABLE ITEMS" },
-                            
-                            
-                            
-                        ]}
-                        height={300}
-                        autoplayMs={1200}
-                        className="mx-auto"
-                    />
-                </div>
-
-                <div className="mt-3 flex items-center justify-center">
-                    <FomoBadge min={200} max={450} durationMs={15 * 60_000} />
-                </div>
-
-                <div className="flex items-center justify-center">
-                    <button className="btn btn-primary mt-4 py-4! cursor-pointer hover:opacity-80 transition-all duration-200" onClick={finalizeRoute}>
-                        GET ACCESS FOR FREE 🔓
-                    </button>
-                </div>
-
-                <div className="absolute top-0 right-0 w-16 h-16 rounded-full bg-red-600 flex items-center justify-center text-white font-bold text-sm -translate-x-1/3 -translate-y-1/3 shadow-glow">
-                        <span className="text-center">FREE TRIAL</span>
-                </div>
-            </Modal>
-
-            {scanning && <ScanOverlayPurchase item={selectedItem} cities={zipData?.cities || []} onDone={openPurchaseOverlay} />}
+          <SuccessHeroSlider
+            items={[
+              { src: "/success/insaneclearance.jpg", caption: "UNLOCK EXCLUSIVE HIDDEN CLEARANCE DEALS" },
+              { src: "/success/pokemoncar.jpg", caption: "UNLOCK TRADING CARD RELEASES" },
+              { src: "/success/lego.jpg", caption: "UNLOCK HIGH DEMAND COLLECTIBLES TO RESELL" },
+              { src: "/success/penny.jpg", caption: "UNLOCK PENNY CLEARANCE ITEMS" },
+              { src: "/success/tools.jpg", caption: "UNLOCK RANDOM RESELLABLE ITEMS" },
+            ]}
+            height={300}
+            autoplayMs={1200}
+            className="mx-auto"
+          />
         </div>
-    );
+
+        <div className="mt-3 flex items-center justify-center">
+          <FomoBadge min={200} max={450} durationMs={15 * 60_000} />
+        </div>
+
+        <div className="flex items-center justify-center">
+          <button className="btn btn-primary mt-4 py-4! cursor-pointer hover:opacity-80 transition-all duration-200" onClick={finalizeRoute}>
+            GET ACCESS FOR FREE 🔓
+          </button>
+        </div>
+
+        <div className="absolute top-0 right-0 w-16 h-16 rounded-full bg-red-600 flex items-center justify-center text-white font-bold text-sm -translate-x-1/3 -translate-y-1/3 shadow-glow">
+          <span className="text-center">FREE TRIAL</span>
+        </div>
+      </Modal>
+
+      {scanning && <ScanOverlayPurchase item={selectedItem} cities={zipData?.cities || []} onDone={openPurchaseOverlay} />}
+    </div>
+  );
 }
 
 function FomoBadge({
-    min = 200,
-    max = 400,
-    durationMs = 15 * 60_000,
-    autoReset = false,
-    onExpire,
-    label = "claimed in the last hour",
+  min = 200,
+  max = 400,
+  durationMs = 15 * 60_000,
+  autoReset = false,
+  onExpire,
+  label = "claimed in the last hour",
 }: FomoProps) {
-    const randInt = (a: number, b: number) => a + Math.floor(Math.random() * (b - a + 1));
-    const [count] = useState(() => randInt(min, max));
-    const endTs = useRef<number>(Date.now() + durationMs);
-    const [remaining, setRemaining] = useState<number>(durationMs);
+  const randInt = (a: number, b: number) => a + Math.floor(Math.random() * (b - a + 1));
+  const [count] = useState(() => randInt(min, max));
+  const endTs = useRef<number>(Date.now() + durationMs);
+  const [remaining, setRemaining] = useState<number>(durationMs);
 
-    // keep min/max valid
-    const safeCount = useMemo(
-        () => Math.min(Math.max(count, Math.min(min, max)), Math.max(min, max)),
-        [count, min, max]
-    );
+  // keep min/max valid
+  const safeCount = useMemo(
+    () => Math.min(Math.max(count, Math.min(min, max)), Math.max(min, max)),
+    [count, min, max]
+  );
 
-    useEffect(() => {
-        // reset endTs when duration changes
-        endTs.current = Date.now() + durationMs;
-        setRemaining(durationMs);
+  useEffect(() => {
+    // reset endTs when duration changes
+    endTs.current = Date.now() + durationMs;
+    setRemaining(durationMs);
 
-        const id = window.setInterval(() => {
-            const left = Math.max(0, endTs.current - Date.now());
-            setRemaining(left);
+    const id = window.setInterval(() => {
+      const left = Math.max(0, endTs.current - Date.now());
+      setRemaining(left);
 
-            if (left === 0) {
-                onExpire?.();
-                if (autoReset) {
-                    endTs.current = Date.now() + durationMs;
-                    setRemaining(durationMs);
-                } else {
-                    window.clearInterval(id);
-                }
-            }
-        }, 1000);
+      if (left === 0) {
+        onExpire?.();
+        if (autoReset) {
+          endTs.current = Date.now() + durationMs;
+          setRemaining(durationMs);
+        } else {
+          window.clearInterval(id);
+        }
+      }
+    }, 1000);
 
-        return () => window.clearInterval(id);
-    }, [durationMs, autoReset, onExpire]);
+    return () => window.clearInterval(id);
+  }, [durationMs, autoReset, onExpire]);
 
-    const mm = String(Math.floor(remaining / 60_000)).padStart(2, "0");
-    const ss = String(Math.floor((remaining % 60_000) / 1000)).padStart(2, "0");
-    const urgent = remaining <= 60_000; // last minute → subtle pulse
+  const mm = String(Math.floor(remaining / 60_000)).padStart(2, "0");
+  const ss = String(Math.floor((remaining % 60_000) / 1000)).padStart(2, "0");
+  const urgent = remaining <= 60_000; // last minute → subtle pulse
 
-    return (
-        <span
-            className={[
-                "inline-flex items-center gap-3 rounded-full border border-white/10 bg-white/5",
-                "px-3 py-1 text-xs font-semibold text-white/80",
-                urgent ? "ring-1 ring-red-500/20 animate-[pulse_1.6s_ease-in-out_infinite]" : "",
-            ].join(" ")}
-            aria-live="polite"
-            title={`Offer window ends in ${mm}:${ss}`}
-        >
-            <span className="text-base leading-none">🔥</span>
-            <span>
-                <strong className="text-white">{safeCount}</strong> {label}
-            </span>
-            <span className="inline-flex items-center gap-1 text-white/70">
-                • <span className="tabular-nums">{mm}:{ss}</span>
-            </span>
-        </span>
-    );
+  return (
+    <span
+      className={[
+        "inline-flex items-center gap-3 rounded-full border border-white/10 bg-white/5",
+        "px-3 py-1 text-xs font-semibold text-white/80",
+        urgent ? "ring-1 ring-red-500/20 animate-[pulse_1.6s_ease-in-out_infinite]" : "",
+      ].join(" ")}
+      aria-live="polite"
+      title={`Offer window ends in ${mm}:${ss}`}
+    >
+      <span className="text-base leading-none">🔥</span>
+      <span>
+        <strong className="text-white">{safeCount}</strong> {label}
+      </span>
+      <span className="inline-flex items-center gap-1 text-white/70">
+        • <span className="tabular-nums">{mm}:{ss}</span>
+      </span>
+    </span>
+  );
 }
