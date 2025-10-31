@@ -10,7 +10,7 @@ import SuccessHeroSlider from "@/components/SuccessHeroSlider";
 import { useSearchParams, useRouter } from "next/navigation";
 import ScanOverlayPurchase from "@/components/ScanOverlayPurchase";
 
-const SIGNUP_URL = "https://join.emoneydeals.com";
+const SIGNUP_URL = "https://claim.emoneydeals.com";
 
 type ApiResp = { items: any[]; count: number };
 
