@@ -7,38 +7,69 @@ const SHEET_NAME = "Sheet1"; // Default sheet name, adjust if needed
 
 async function savePhoneToGoogleSheets(phone: string) {
   try {
-    // Get service account credentials from environment variables
+    // Try to get credentials from environment variables
+    // Option 1: Full service account JSON
+    const serviceAccountJson = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
+    
+    // Option 2: Separate email and private key
     const serviceAccountEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
     const serviceAccountPrivateKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n");
 
-    if (!serviceAccountEmail || !serviceAccountPrivateKey) {
+    let auth;
+
+    if (serviceAccountJson) {
+      // Use full JSON credential
+      try {
+        const credentials = JSON.parse(serviceAccountJson);
+        auth = new google.auth.JWT({
+          email: credentials.client_email,
+          key: credentials.private_key,
+          scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+        });
+        console.log("✅ Using service account JSON for authentication");
+      } catch (parseError) {
+        console.error("❌ Failed to parse GOOGLE_SERVICE_ACCOUNT_KEY JSON:", parseError);
+        return false;
+      }
+    } else if (serviceAccountEmail && serviceAccountPrivateKey) {
+      // Use separate email and key
+      auth = new google.auth.JWT({
+        email: serviceAccountEmail,
+        key: serviceAccountPrivateKey,
+        scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+      });
+      console.log("✅ Using separate email/key for authentication");
+    } else {
       console.error("❌ Google Sheets credentials not configured");
+      console.error("   Missing: GOOGLE_SERVICE_ACCOUNT_KEY (JSON) or");
+      console.error("   Missing: GOOGLE_SERVICE_ACCOUNT_EMAIL and GOOGLE_PRIVATE_KEY");
       return false;
     }
 
-    // Authenticate with Google Sheets API
-    const auth = new google.auth.JWT({
-      email: serviceAccountEmail,
-      key: serviceAccountPrivateKey,
-      scopes: ["https://www.googleapis.com/auth/spreadsheets"],
-    });
-
     const sheets = google.sheets({ version: "v4", auth });
 
-    // Append phone number to the sheet
-    await sheets.spreadsheets.values.append({
+    // Append phone number to the sheet (after row 1, which is the header)
+    const result = await sheets.spreadsheets.values.append({
       spreadsheetId: SPREADSHEET_ID,
       range: `${SHEET_NAME}!A:A`, // Column A is the Phone column
       valueInputOption: "RAW",
+      insertDataOption: "INSERT_ROWS",
       requestBody: {
         values: [[phone]],
       },
     });
 
     console.log(`✅ Phone number saved to Google Sheets: ${phone}`);
+    console.log(`   Updated range: ${result.data.updates?.updatedRange || 'unknown'}`);
     return true;
-  } catch (error) {
-    console.error("❌ Error saving to Google Sheets:", error);
+  } catch (error: any) {
+    console.error("❌ Error saving to Google Sheets:");
+    console.error("   Error message:", error.message);
+    console.error("   Error code:", error.code);
+    if (error.response) {
+      console.error("   Response status:", error.response.status);
+      console.error("   Response data:", JSON.stringify(error.response.data));
+    }
     return false;
   }
 }
