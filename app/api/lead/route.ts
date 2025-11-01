@@ -7,6 +7,16 @@ const SHEET_NAME = "Sheet1"; // Default sheet name, adjust if needed
 
 async function savePhoneToGoogleSheets(phone: string) {
   try {
+    // Debug: Check what environment variables are present (without showing values)
+    const hasJsonKey = !!process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
+    const hasEmail = !!process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+    const hasPrivateKey = !!process.env.GOOGLE_PRIVATE_KEY;
+    
+    console.log("🔍 Checking Google Sheets credentials:");
+    console.log(`   GOOGLE_SERVICE_ACCOUNT_KEY exists: ${hasJsonKey}`);
+    console.log(`   GOOGLE_SERVICE_ACCOUNT_EMAIL exists: ${hasEmail}`);
+    console.log(`   GOOGLE_PRIVATE_KEY exists: ${hasPrivateKey}`);
+    
     // Try to get credentials from environment variables
     // Option 1: Full service account JSON
     const serviceAccountJson = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
@@ -17,36 +27,70 @@ async function savePhoneToGoogleSheets(phone: string) {
 
     let auth;
 
-    if (serviceAccountJson) {
+    if (serviceAccountJson && serviceAccountJson.trim().length > 0) {
       // Use full JSON credential
       try {
         const credentials = JSON.parse(serviceAccountJson);
+        if (!credentials.client_email || !credentials.private_key) {
+          console.error("❌ Service account JSON missing required fields (client_email or private_key)");
+          return false;
+        }
         auth = new google.auth.JWT({
           email: credentials.client_email,
           key: credentials.private_key,
           scopes: ["https://www.googleapis.com/auth/spreadsheets"],
         });
-        console.log("✅ Using service account JSON for authentication");
-      } catch (parseError) {
-        console.error("❌ Failed to parse GOOGLE_SERVICE_ACCOUNT_KEY JSON:", parseError);
+        console.log(`✅ Using service account JSON for authentication (email: ${credentials.client_email.substring(0, 20)}...)`);
+      } catch (parseError: any) {
+        console.error("❌ Failed to parse GOOGLE_SERVICE_ACCOUNT_KEY JSON:", parseError.message);
         return false;
       }
-    } else if (serviceAccountEmail && serviceAccountPrivateKey) {
+    } else if (serviceAccountEmail && serviceAccountEmail.trim().length > 0 && 
+               serviceAccountPrivateKey && serviceAccountPrivateKey.trim().length > 0) {
       // Use separate email and key
       auth = new google.auth.JWT({
         email: serviceAccountEmail,
         key: serviceAccountPrivateKey,
         scopes: ["https://www.googleapis.com/auth/spreadsheets"],
       });
-      console.log("✅ Using separate email/key for authentication");
+      console.log(`✅ Using separate email/key for authentication (email: ${serviceAccountEmail.substring(0, 20)}...)`);
     } else {
       console.error("❌ Google Sheets credentials not configured");
-      console.error("   Missing: GOOGLE_SERVICE_ACCOUNT_KEY (JSON) or");
-      console.error("   Missing: GOOGLE_SERVICE_ACCOUNT_EMAIL and GOOGLE_PRIVATE_KEY");
+      if (!hasJsonKey && !hasEmail && !hasPrivateKey) {
+        console.error("   No Google Sheets environment variables found at all!");
+        console.error("   Please set either GOOGLE_SERVICE_ACCOUNT_KEY (full JSON) or");
+        console.error("   both GOOGLE_SERVICE_ACCOUNT_EMAIL and GOOGLE_PRIVATE_KEY");
+      } else {
+        if (hasJsonKey && (!serviceAccountJson || serviceAccountJson.trim().length === 0)) {
+          console.error("   GOOGLE_SERVICE_ACCOUNT_KEY exists but is empty");
+        }
+        if (hasEmail && (!serviceAccountEmail || serviceAccountEmail.trim().length === 0)) {
+          console.error("   GOOGLE_SERVICE_ACCOUNT_EMAIL exists but is empty");
+        }
+        if (hasPrivateKey && (!serviceAccountPrivateKey || serviceAccountPrivateKey.trim().length === 0)) {
+          console.error("   GOOGLE_PRIVATE_KEY exists but is empty or invalid");
+        }
+      }
       return false;
     }
 
     const sheets = google.sheets({ version: "v4", auth });
+
+    // First, verify we can access the sheet by reading the first row
+    try {
+      const headerCheck = await sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `${SHEET_NAME}!A1:A1`,
+      });
+      console.log(`✅ Successfully accessed sheet. Header row: ${headerCheck.data.values?.[0]?.[0] || 'empty'}`);
+    } catch (accessError: any) {
+      console.error("❌ Cannot access Google Sheet. Possible issues:");
+      console.error("   1. Sheet not shared with service account email");
+      console.error("   2. Invalid spreadsheet ID");
+      console.error("   3. Invalid sheet name");
+      console.error(`   Error: ${accessError.message}`);
+      return false;
+    }
 
     // Append phone number to the sheet (after row 1, which is the header)
     const result = await sheets.spreadsheets.values.append({
@@ -61,6 +105,7 @@ async function savePhoneToGoogleSheets(phone: string) {
 
     console.log(`✅ Phone number saved to Google Sheets: ${phone}`);
     console.log(`   Updated range: ${result.data.updates?.updatedRange || 'unknown'}`);
+    console.log(`   Updated rows: ${result.data.updates?.updatedRows || 0}`);
     return true;
   } catch (error: any) {
     console.error("❌ Error saving to Google Sheets:");
